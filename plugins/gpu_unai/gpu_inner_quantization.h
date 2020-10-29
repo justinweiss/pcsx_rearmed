@@ -85,7 +85,7 @@ static void SetupDitheringConstants()
 // Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
 ////////////////////////////////////////////////////////////////////////////////
 template <int DITHER>
-GPU_INLINE u16 gpuColorQuantization24(u32 uSrc24, const u16 *pDst)
+GPU_INLINE u16 gpuColorQuantization24Generic(u32 uSrc24, const u16 *pDst)
 {
 	if (DITHER)
 	{

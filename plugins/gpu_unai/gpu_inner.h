@@ -58,18 +58,29 @@
 #ifdef __arm__
 #include "gpu_inner_blend_arm.h"
 #include "gpu_inner_light_arm.h"
+#include "gpu_inner_quantization_arm.h"
 #define gpuBlending gpuBlendingARM
+#define gpuBlending24 gpuBlending24ARM
 #define gpuLightingRGB gpuLightingRGBARM
+#define gpuLightingRGB24 gpuLightingRGB24ARM
 #define gpuLightingTXT gpuLightingTXTARM
 #define gpuLightingTXTGouraud gpuLightingTXTGouraudARM
+#define gpuLightingTXT24 gpuLightingTXT24ARM
+#define gpuLightingTXT24Gouraud gpuLightingTXT24GouraudARM
+#define gpuColorQuantization24 gpuColorQuantization24ARM
 // Non-dithering lighting and blending functions preserve uSrc
 // MSB. This saves a few operations and useless load/stores.
 #define MSB_PRESERVED (!CF_DITHER)
 #else
 #define gpuBlending gpuBlendingGeneric
+#define gpuBlending24 gpuBlending24Generic
 #define gpuLightingRGB gpuLightingRGBGeneric
+#define gpuLightingRGB24 gpuLightingRGB24Generic
 #define gpuLightingTXT gpuLightingTXTGeneric
 #define gpuLightingTXTGouraud gpuLightingTXTGouraudGeneric
+#define gpuLightingTXT24 gpuLightingTXT24Generic
+#define gpuLightingTXT24Gouraud gpuLightingTXT24GouraudGeneric
+#define gpuColorQuantization24 gpuColorQuantization24Generic
 #define MSB_PRESERVED 0
 #endif
 
