@@ -148,7 +148,7 @@ GPU_INLINE uint_fast16_t gpuLightingRGBGeneric(u32 gCol)
 //                      ^ bit 31
 //  Where 'X' are fixed-pt bits, '0' zero-padding, and '-' is don't care
 ////////////////////////////////////////////////////////////////////////////////
-GPU_INLINE u32 gpuLightingRGB24(u32 gCol)
+GPU_INLINE u32 gpuLightingRGB24Generic(u32 gCol)
 {
 	return ((gCol<<19) & (0x1FF<<20)) |
 	       ((gCol>> 2) & (0x1FF<<10)) |
@@ -214,7 +214,7 @@ GPU_INLINE uint_fast16_t gpuLightingTXTGouraudGeneric(uint_fast16_t uSrc, u32 gC
 //                     ^ bit 31
 // Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
 ////////////////////////////////////////////////////////////////////////////////
-GPU_INLINE u32 gpuLightingTXT24(uint_fast16_t uSrc, u8 r8, u8 g8, u8 b8)
+GPU_INLINE u32 gpuLightingTXT24Generic(uint_fast16_t uSrc, u8 r8, u8 g8, u8 b8)
 {
 	uint_fast16_t r1 = uSrc&0x001F;
 	uint_fast16_t g1 = uSrc&0x03E0;
@@ -249,7 +249,7 @@ GPU_INLINE u32 gpuLightingTXT24(uint_fast16_t uSrc, u8 r8, u8 g8, u8 b8)
 //                     ^ bit 31
 // Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
 ////////////////////////////////////////////////////////////////////////////////
-GPU_INLINE u32 gpuLightingTXT24Gouraud(uint_fast16_t uSrc, u32 gCol)
+GPU_INLINE u32 gpuLightingTXT24GouraudGeneric(uint_fast16_t uSrc, u32 gCol)
 {
 	uint_fast16_t r1 = uSrc&0x001F;
 	uint_fast16_t g1 = uSrc&0x03E0;

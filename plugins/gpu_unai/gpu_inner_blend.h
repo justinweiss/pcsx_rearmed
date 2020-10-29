@@ -137,7 +137,7 @@ GPU_INLINE u32 gpuGetRGB24(uint_fast16_t uSrc)
 // Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
 ////////////////////////////////////////////////////////////////////////////////
 template <int BLENDMODE>
-GPU_INLINE u32 gpuBlending24(u32 uSrc24, uint_fast16_t uDst)
+GPU_INLINE u32 gpuBlending24Generic(u32 uSrc24, uint_fast16_t uDst)
 {
 	// These use techniques adapted from Blargg's techniques mentioned in
 	//  in gpuBlending() comments above. Not as much bitwise trickery is

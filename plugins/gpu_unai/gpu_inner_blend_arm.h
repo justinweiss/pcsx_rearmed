@@ -68,7 +68,7 @@ GPU_INLINE uint_fast16_t gpuBlendingARM(uint_fast16_t uSrc, uint_fast16_t uDst)
 		     : [sum] "=&r" (sum), [mix] "=&r" (mix)
 		     : [uSrc] "r" (uSrc), [uDst] "r" (uDst), [mask] "r" (0x0421));
 	}
-    
+
 	// 1.0 x Back - 1.0 x Forward
 	if (BLENDMODE==2) {
 		u32 diff;
@@ -96,8 +96,123 @@ GPU_INLINE uint_fast16_t gpuBlendingARM(uint_fast16_t uSrc, uint_fast16_t uDst)
 	if (!SKIP_USRC_MSB_MASK) {
 		asm ("orr %[mix], %[mix], #0x8000" : [mix] "+r" (mix));
 	}
-  
+
 	return mix;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Convert bgr555 color in uSrc to padded u32 5.4:5.4:5.4 bgr fixed-pt
+//  color triplet suitable for use with HQ 24-bit quantization.
+//
+// INPUT:
+//       'uDst' input: -bbbbbgggggrrrrr
+//                     ^ bit 16
+// RETURNS:
+//         u32 output: 000bbbbbXXXX0gggggXXXX0rrrrrXXXX
+//                     ^ bit 31
+// Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
+////////////////////////////////////////////////////////////////////////////////
+GPU_INLINE u32 gpuGetRGB24ARM(uint_fast16_t uSrc)
+{
+	u32 tmp, out;
+
+	// return ((uSrc & 0x7C00)<<14)
+	//      | ((uSrc & 0x03E0)<< 9)
+	//      | ((uSrc & 0x001F)<< 4);
+
+	asm ("and    %[out],  %[src], #0x7C00 \n\t"           // out is 00000000000000000bbbbb0000000000
+	     "and    %[tmp],  %[src], #0x03E0 \n\t"           // tmp is 0000000000000000000000ggggg00000
+	     "orr    %[out],  %[tmp], %[out], lsl #0x05 \n\t" // out is 000000000000bbbbb00000ggggg00000
+	     "and    %[src],  %[src], #0x001F \n\t"           // src is 000000000000000000000000000rrrrr
+	     "orr    %[out],  %[src], %[out], lsl #0x05 \n\t" // out is 0000000bbbbb00000ggggg00000rrrrr
+	     "lsl    %[out],  %[out], #0x04   \n\t"           // out is 000bbbbb00000ggggg00000rrrrr0000
+	     : [src] "+&r" (uSrc), [tmp] "=&r" (tmp), [out] "=&r" (out));
+	return out;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Blend padded u32 5.4:5.4:5.4 bgr fixed-pt color triplet in 'uSrc24'
+//  (foreground color) with bgr555 color in 'uDst' (background color),
+//  returning the resulting u32 5.4:5.4:5.4 color.
+//
+// INPUT:
+//     'uSrc24' input: 000bbbbbXXXX0gggggXXXX0rrrrrXXXX
+//                     ^ bit 31
+//       'uDst' input: -bbbbbgggggrrrrr
+//                     ^ bit 16
+// RETURNS:
+//         u32 output: 000bbbbbXXXX0gggggXXXX0rrrrrXXXX
+//                     ^ bit 31
+// Where 'X' are fixed-pt bits, '0' is zero-padding, and '-' is don't care
+////////////////////////////////////////////////////////////////////////////////
+template <int BLENDMODE>
+GPU_INLINE u32 gpuBlending24ARM(u32 uSrc24, uint_fast16_t uDst)
+{
+	// These use techniques adapted from Blargg's techniques mentioned in
+	//  in gpuBlending() comments above. Not as much bitwise trickery is
+	//  necessary because of presence of 0 padding in uSrc24 format.
+
+	u32 uDst24 = gpuGetRGB24ARM(uDst);
+	u32 omsk = 0x20080200;
+
+	// Clear any carries left over flom lighting
+	asm ("bic %[src], %[src], %[omsk]" : [src] "+r" (uSrc24) : [omsk] "r" (omsk));
+
+	if (BLENDMODE == 3) {
+		// Prepare uSrc for blending ((0.25 * uSrc) & (0.25 * mask))
+		asm ("and %[src], %[mask], %[src], lsr #0x2" : [src] "+r" (uSrc24) : [mask] "r" (0x07F1FC7F));
+	}
+
+	// 0.5 x Back + 0.5 x Forward
+	if (BLENDMODE==0) {
+		// const u32 uMsk = 0x1FE7F9FE;
+		// // Only need to mask LSBs of uSrc24, uDst24's LSBs are 0 already
+		// mix = (uDst24 + (uSrc24 & uMsk)) >> 1;
+
+		asm ("and %[src], %[src], %[mask]\n\t" // uSrc24 & uMsk
+		     "add %[src], %[src], %[dst]\n\t"  // uDst24 + ...
+		     "lsr %[src], %[src], #0x1\n\t"    // ... >> 1
+		     : [src] "+&r" (uSrc24)
+		     : [dst] "r" (uDst24), [mask] "r" (0x1FE7F9FE));
+	}
+
+	// 1.0 x Back + 1.0 x Forward
+	if (BLENDMODE==1 || BLENDMODE==3) {
+		// u32 sum     = uSrc24 + uDst24;
+		// u32 carries = sum & 0x20080200;
+		// u32 modulo  = sum - carries;
+		// u32 clamp   = carries - (carries >> 9);
+		// mix = modulo | clamp;
+
+		// Some of these steps can be skipped, assuming quantization
+		// clears the carry bits.
+		asm ("add    %[src],  %[src],    %[dst]   \n\t"   // sum = uSrc24 + uDst24
+		     "and    %[omsk], %[omsk],   %[src]   \n\t"   // carries = sum & 0x20080200
+		     "sub    %[omsk], %[omsk],   %[omsk], lsr #0x09 \n\t" // clamp = carries - (carries >> 9)
+		     "orr    %[src],  %[src],    %[omsk]  \n\t"   // mix = sum | clamp
+		     : [src] "+r" (uSrc24), [omsk] "+r" (omsk)
+		     : [dst] "r" (uDst24));
+	}
+
+	// 1.0 x Back - 1.0 x Forward
+	if (BLENDMODE==2) {
+		// // Insert ones in 0-padded borrow slot of color to be subtracted from
+		// uDst24 |= 0x20080200;
+		// u32 diff    = uDst24 - uSrc24;
+		// u32 borrows = diff & 0x20080200;
+		// u32 clamp   = borrows - (borrows >> 9);
+		// mix = diff & clamp;
+
+		asm ("orr    %[dst],  %[dst],   %[omsk]  \n\t" // uDst24 |= 0x20080200
+		     "sub    %[src],  %[dst],   %[src]   \n\t" // diff = uDst24 - uSrc24
+		     "and    %[omsk], %[omsk],  %[src]   \n\t" // borrows = diff & 0x20080200
+		     "sub    %[omsk], %[omsk],  %[omsk], lsr #0x09   \n\t" // clamp = borrows - (borrows >> 9)
+		     "and    %[src],  %[src],   %[omsk]  \n\t" // mix = diff & clamp
+		     : [src] "+r" (uSrc24), [omsk] "+r" (omsk), [dst] "+r" (uDst24));
+	}
+
+	return uSrc24;
 }
 
 #endif  //_OP_BLEND_ARM_H_
